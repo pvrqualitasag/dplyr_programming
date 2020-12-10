@@ -1,0 +1,106 @@
+---
+title: "Programming with dplyr"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Disclaimer
+
+
+# Background
+When using tidy evaluations and other features of the [tidyverse](https://www.tidyverse.org/) in functions, special measures must be applied.
+
+
+# Examples
+From https://shipt.tech/https-shipt-tech-advanced-programming-and-non-standard-evaluation-with-dplyr-e043f89deb3d the following examples are tried. 
+
+The idea is to use the following statement in a function. 
+
+```{r}
+library(dplyr)
+
+mtcars %>%
+  filter(cyl != 4) %>%
+  group_by(gear) %>%
+  summarize(avg_mpg = mean(mpg))
+
+```
+
+The first idea could look as follows
+
+```{r}
+# This won't work
+test_function <- function(df, group_col){
+  df %>%
+    group_by(group_col) %>%
+    summarize(n = n())
+}
+
+test_function(
+  df        = mtcars, 
+  group_col = gear
+) 
+
+```
+
+But this does not work. 
+
+The following solutions has to be used instead
+
+```{r}
+# We have a field name stored as text
+my_field <- "cyl"
+
+# Change our field name to a symbol object
+my_symbol <- sym(my_field)
+
+# Use it in a group_by call
+mtcars %>%
+  group_by(!!my_symbol) %>%
+  summarize(mean_mpg = mean(mpg))
+```
+
+This can be used in a function as
+
+```{r}
+test_function_group_sym <- function(df, ps_group_field){
+  # convert group field from string to symbol
+  group_symbol <- sym(ps_group_field)
+  # make the grouped-summarise
+  df %>% 
+    group_by((!!group_symbol)) %>%
+    summarize(mean_mpg = mean(mpg))
+}
+test_function_group_sym(df = mtcars, ps_group_field = 'cyl')
+```
+
+The variable in the summarize-function can also be passed as in
+
+```{r}
+test_function_group_var_sym <- function(df, ps_group_field, ps_var_field, ps_var_name){
+  # convert group field from string to symbol
+  group_symbol <- sym(ps_group_field)
+  # variable field
+  var_symbol <- sym(ps_var_field)
+  # summarise
+  df %>%
+    group_by((!!group_symbol)) %>%
+    summarize(!!ps_var_name := mean((!!var_symbol)))
+}
+```
+This can be tested with 'mpg'
+
+```{r}
+test_function_group_var_sym(df = mtcars, ps_group_field = 'cyl', ps_var_field = 'mpg', ps_var_name = 'mean_mpg')
+```
+
+The same tests with 'hp'
+
+```{r}
+test_function_group_var_sym(df = mtcars, ps_group_field = 'cyl', ps_var_field = 'hp', ps_var_name = 'mean_hp')
+```
+
+

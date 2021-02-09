@@ -1,0 +1,241 @@
+---
+title: "Use *-join in Functions"
+output: html_notebook
+---
+
+# Disclaimer
+This contains a how-to for using dplyr *-joins in functions.
+
+
+# Other Examples
+From https://community.rstudio.com/t/using-rlang-to-specify-joining-variables-in-dplyr-join-functions/48601
+
+```{r}
+set.seed(123)
+library(dplyr, warn.conflicts = FALSE)
+
+# Using a character vector as input
+foo <- function(data, x) {
+  inner_join(
+    group_by_at(data, x) %>% summarise(wt = mean(wt)),
+    group_by_at(data, x) %>% summarise(n = n()),
+    by = x
+  )
+}
+
+foo(mtcars, c("am", "cyl"))
+```
+
+Modify the above example
+
+```{r}
+library(dplyr)
+(tbl_mean_wt <- mtcars %>% group_by_at(c("am", "cyl")) %>% summarise(wt = mean(wt)))
+```
+
+The second tbl
+
+```{r}
+(tbl_count_wt <- mtcars %>% group_by_at(c("am", "cyl")) %>% summarise(n = n()))
+```
+
+Joining the two tibbles
+
+```{r}
+inner_join(tbl_mean_wt, tbl_count_wt, by = c("am", "cyl"))
+```
+
+The same thing in a function
+
+```{r}
+vec_by_vars <- c("am", "cyl")
+foo_join <- function(ptbl1, ptbl2, pvec_by){
+  inner_join(ptbl1, ptbl2, by = pvec_by)
+}
+foo_join(ptbl1 = tbl_mean_wt, ptbl2 = tbl_count_wt, pvec_by = vec_by_vars)
+```
+
+
+# Data
+The data are read from an existing pedigree, then a reproducible example is 
+created and stored in a local file. Hence the following preparation steps 
+should only be run once.
+
+```{r eval=TRUE}
+(vec_ped_path <- list.files(system.file('extdata', package = 'qprppedigree'), full.names = TRUE))
+s_ped_path <- vec_ped_path[3]
+tbl_test_ped <- qprppedigree::read_prp_pedigree(ps_pedig_path = s_ped_path)
+dim(tbl_test_ped)
+```
+
+The first few lines of the pedigree read is given by
+
+```{r}
+head(tbl_test_ped)
+```
+
+From the complete pedigree, we select a number of records to produce the small example.
+
+```{r}
+library(dplyr)
+tbl_ped_small_ex <- tbl_test_ped %>% filter(`#IDTier` == 997953372 |
+                                            `#IDTier` == 997438624 |
+                                            `#IDTier` == 997959197 |
+                                            `#IDTier` == 997959200 |
+                                            `#IDTier` == 997958313 |
+                                            `#IDTier` == 997961951 |
+                                            `#IDTier` == 997977775 |
+                                            `#IDTier` == 998002894 |
+                                            `#IDTier` == 998003890 |
+                                            `#IDTier` == 998003889 |
+                                            `#IDTier` == 997535439 |
+                                            `#IDTier` == 997774809 |
+                                            `#IDTier` == 997415332 |
+                                            `#IDTier` == 997406925 |
+                                            `#IDTier` == 1000810031 |
+                                            `#IDTier` == 1000050624 |
+                                            `#IDTier` == 999870937 |
+                                            `#IDTier` == 1000161006)
+```
+
+
+The first few lines of the small pedigree consists of
+
+```{r}
+head(tbl_ped_small_ex)
+```
+
+The last few records are given by
+
+```{r}
+tail(tbl_ped_small_ex)
+```
+
+The small pedigree is written to a file to be able to read from that at a later time.
+
+```{r}
+s_small_ped_path <- 'small_pedigree.csv'
+readr::write_delim(tbl_ped_small_ex, path = s_small_ped_path, delim = '|')
+```
+
+
+# Tests with Function
+The tests starts with a fresh environment and then reads the data from the file
+
+```{r}
+rm(list = ls())
+# path to test pedigree
+s_small_ped_path <- 'small_pedigree.csv'
+tbl_small_test_ped <- qprppedigree::read_prp_pedigree(ps_pedig_path = s_small_ped_path)
+dim(tbl_small_test_ped)
+```
+
+The first few records of this pedigree corresponds to 
+
+```{r}
+head(tbl_small_test_ped)
+```
+
+
+## Birthdate Check
+Based on this testpedigree, we want to check whether the birthdates between parents and offspring are consistent. Ultimately, this should be done in a function. We first start outside of a function.
+
+The first step is to join the birthdates of the parents to the information about the animals.
+
+```{r}
+library(dplyr)
+tbl_animal_bd <- tbl_small_test_ped %>% select(`#IDTier`, IDVater, Birthdate)
+head(tbl_animal_bd)
+```
+
+The birthdates of the sires are joined from the original tibble
+
+```{r}
+tbl_animal_bd %>% 
+  inner_join(tbl_small_test_ped, by = c('IDVater' = '#IDTier')) %>% 
+  select(`#IDTier`, IDVater, Birthdate.x, Birthdate.y)
+```
+
+From the above tibble, we want to filter all records where the birthdate ('Birthdate.x') of the animal is before the birthdate ('Birthdate.y') of the sire. This is done using an additional filter-statement.
+
+```{r}
+tbl_animal_bd %>% 
+  inner_join(tbl_small_test_ped, by = c('IDVater' = '#IDTier'), suffix = c(".Tier", ".Vater")) %>% 
+  select(`#IDTier`, IDVater, Birthdate.Tier, Birthdate.Vater) %>%
+  filter(Birthdate.Tier < Birthdate.Vater)
+```
+
+An alternative statement of the 'by'-argument
+
+```{r}
+pvec_by  <- c('IDVater' = '#IDTier')
+tbl_animal_bd %>% 
+  inner_join(tbl_small_test_ped, by = pvec_by, suffix = c(".Tier", ".Vater")) %>% 
+  select(`#IDTier`, IDVater, Birthdate.Tier, Birthdate.Vater) %>%
+  filter(Birthdate.Tier < Birthdate.Vater)
+
+```
+
+In order to be able to run the above statements in a function, we have to replace all column names in variables.
+
+```{r}
+ps_col_animal_id <- '#IDTier'
+ps_col_sire_id <- 'IDVater'
+ps_col_animal_bd <- 'Birthdate.Tier'
+ps_col_parent_bd <- 'Birthdate.Vater'
+# vectors 
+pvec_by  <- c('IDVater' = '#IDTier')
+pvec_suffix <- c(".Tier", ".Vater")
+
+# using symbols
+tbl_animal_bd %>% 
+  inner_join(tbl_small_test_ped, by = pvec_by, suffix = pvec_suffix) %>% 
+  select(!!sym(ps_col_animal_id), !!sym(ps_col_sire_id), !!sym(ps_col_animal_bd), !!sym(ps_col_parent_bd)) %>%
+  filter(!!sym(ps_col_animal_bd) < !!sym(ps_col_parent_bd))
+
+```
+
+Convert the above statements into a function leads to
+
+```{r}
+check_parent_animal_bd <- function(ptbl_ped,
+                                   ps_animal_id = '#IDTier',
+                                   ps_parent_id,
+                                   ps_col_bd    = 'Birthdate',
+                                   pvec_by,
+                                   pvec_suffix){
+  # symbols
+  sym_animal_id <- sym(ps_animal_id)
+  sym_parent_id <- sym(ps_parent_id)
+  sym_col_bd <- sym(ps_col_bd)
+  vec_col_bd <- sapply(pvec_suffix, function(x) paste(ps_col_bd, x, sep = ''), USE.NAMES = FALSE)
+  sym_animal_bd <- sym(vec_col_bd[1])
+  sym_parent_bd <- sym(vec_col_bd[2])
+  # create the tibble with animal and parent bd
+  tbl_animal_bd <- dplyr::select(ptbl_ped, !!sym_animal_id, !!sym_parent_id, !!sym_col_bd)
+  # join parent bd and run check with filter
+  return(tbl_animal_bd %>%
+           inner_join(ptbl_ped, by = pvec_by, suffix = pvec_suffix) %>% 
+           select(!!sym_animal_id, !!sym_parent_id, !!sym_animal_bd, !!sym_parent_bd) %>%
+           filter(!!sym_animal_bd < !!sym_parent_bd)) 
+}
+```
+
+The function is tested with
+
+```{r}
+check_parent_animal_bd(ptbl_ped     = tbl_small_test_ped,
+                       ps_parent_id = 'IDVater',
+                       pvec_by      = c('IDVater' = '#IDTier'),
+                       pvec_suffix  = c(".Tier", ".Vater"))
+```
+
+The same for the mothers
+
+```{r}
+check_parent_animal_bd(ptbl_ped     = tbl_small_test_ped,
+                       ps_parent_id = 'IDMutter',
+                       pvec_by      = c('IDMutter' = '#IDTier'),
+                       pvec_suffix  = c(".Tier", ".Mutter"))
+```
+

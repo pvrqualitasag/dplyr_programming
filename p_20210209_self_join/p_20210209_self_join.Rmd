@@ -1,0 +1,44 @@
+---
+title: "Use Filter To Identify Identical Elements of two Columns"
+author: "Peter von Rohr"
+date: "2021-02-09"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Disclaimer
+Tests and experiments on finding identical elements using filters
+
+
+# Data
+The data are used are given by certain pedigrees. The test pedigree is read from the following input file.
+
+```{r}
+vec_ped_path <- list.files(system.file('extdata', package = 'qprppedigree'), full.names = TRUE)
+(s_ped_path <- vec_ped_path[4])
+```
+
+The pedigree is read using the following command
+
+```{r}
+tbl_p <- qprppedigree::read_prp_pedigree(ps_pedig_path = s_ped_path)
+```
+
+Records with identical IDs of animals and parents are to be filtered out. Start with the comparison of animal and mother
+
+```{r}
+require(dplyr)
+sym_id <- sym("#IDTier")
+sym_dam <- sym("IDMutter")
+tbl_p %>% filter(!!sym_id == !!sym_dam)
+```
+
+The same can be done with the animal and the sire.
+
+```{r}
+tbl_p %>% filter(`#IDTier` == IDVater)
+```
+
